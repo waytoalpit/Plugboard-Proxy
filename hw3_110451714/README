@@ -1,0 +1,89 @@
+*****************************CSE508: Network Security, Spring 2016*******************************************
+
+Homework 3: Plugboard Proxy
+-------------------------------------------------------------------------------
+
+Submission deadline: 4/8/2016 11:59pm EDT
+Submission through https://blackboard.stonybrook.edu
+
+Submitted By: Alpit Kumar Gupta (110451714)
+________________________________________________________________________________
+
+
+Objective: This project develops a "plugboard" proxy for adding an extra layer of protection to publicly accessible network services.
+
+
+Design: Project contains two source files and one Makefile:
+
+#File1: pbproxy.c
+	This file contains both the pbproxy client and pbproxy server instance code base.
+	
+
+Code flow
+	ssh <--stdin/stdout--> pbproxy-c <--socket 1--> pbproxy-s <--socket 2--> sshd
+\______________________________/                \___________________________/
+             client                                        server           
+
+1. Pbproxy Client: Once executed, it request a socket connection to Pbproxy server with given host address and port. I have used non blocking socket connections so that both client and server can send and receive the data stream simultaneously. Once connection is accepted by the Pbproxy server instance, it uses STDIN to take input and encrypts it using the specified symmetric key. As it is a non-blocking communication channel, whenever it read any data from STDIN, encrypts it and send it over the pbproxy server socket. Similarly, whenever it reads any data from the socket, decrypts it using symmetric key and write it to the STDOUT. Both client and server are assumed to know the symmetric key that they use it for encryption and decryption.
+
+Note: As suggested by the Professor, Whenever the connection would be established in between client and server, client would create AES_BLOCK_SIZE size of random IV and share with the server. Server will receive the IV and save it locally. This will happen only once at the establishment of connection.
+
+2. Pbproxy Server: Once executed, Pbproxy Server instance will create two persistent socket connections- First it will create a socket connection at given port and start listening for the client request. Additionally, it will request sshd for a socket connection on the specified port. As soon as it connects with any of the client, it reads the AES_BLOCK_SIZE size of bytes as a IV and then start non-blocking read/write to both the sockets. Whenever it gets any data from the client, decrypts it and send it to the other socket connected with application. Similarly whenever it receives anything from the sshd, encrypts using the symmetric key and send it over the socket connection with pbproxy client instance. Both client and server has symmetric key which they use for encryption and decryption. All the socket connections, STDIN and STDOUT are designed as a non-blocking queue so that they can transfer data streams paralley.
+
+
+#File2: crypto.c
+	This file provides code base for actual encryption and decryption of the data stream using AES CTR mode. It takes input data, IV and symmetric key to perform encryption and decryption.
+
+
+#File3: Makefile: 
+	Once executed "make" command, this file would compile both pbproxy.c and crypto.c together and make an executable "pbproxy".
+
+
+******************************************How to execute the program******************************************************
+
+Eventhough this pbproxy can work as an extra layer of security in any of the client and server model but i have tested only for below behaviors.
+I have installed openssl and openssh to my ubuntu based virtual machines.
+
+*********
+TestCase1: 
+	a. open a terminal, execute nc as sshd
+	  
+	   nc -l -p 5000
+	  
+	b. open a terminal, execute pbproxy server instance which will take data from pbproxy client instance, decrypts and send to the sshd.
+	   Also, receives data from sshd, encrypts and send it to the pbproxy client instance.
+	
+	  ./pbproxy -l 2222 localhost 5000
+	  
+	c. open a terminal, execute pbproxy client instance which takes data from STDIN, encrypts it and send it to the pbproxy server.
+	   Also, receives data from pbproxy server instance, decrypts and write to the STDOUT.
+	   
+	   ./pbproxy localhost 2222
+
+
+*********	   
+TestCase2:
+	a. open a terminal, execute reverse pbproxy instance of pbproxy server which will configure sshd to listen *only* on the localhost     
+	   interface, making it inaccessible from the public network. We execute a reverse pbproxy instance on the same host.
+	   
+	   ./pbproxy -l 2222 localhost 22
+	   
+	
+	b. open a terminal, Clients can then connect to the SSH server using the following command:
+	
+		ssh -o "ProxyCommand ./pbproxy localhost 2222" localhost
+		
+
+
+References:
+	I have referred below websites/internet sources to implement and develop this tool.
+	
+	https://en.wikipedia.org/wiki/Client%E2%80%93server_model
+	http://www.tutorialspoint.com/unix_sockets/client_server_model.htm
+	http://www.gurutechnologies.net/blog/aes-ctr-encryption-in-c/
+	http://beej.us/guide/bgnet/output/html/multipage/fcntlman.html
+	
+	
+
+Thanks for reading this!
+
